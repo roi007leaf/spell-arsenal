@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.7 - 2026-10-04
+
+- Fix automatic D&D 5e placement damage opening a roll configuration dialog over spell effects, including when Nik's DND5e Tweaks has automatic damage prompts disabled.
+- Keep native damage rolls, targeting, scaling, and manual damage configuration intact.
+
 ## 0.1.6 — 2026-10-03
 
 - Simplify single-save prompt buttons to show the save ability without repeating the D&D activity's combined trigger name.

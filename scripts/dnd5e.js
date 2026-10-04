@@ -113,7 +113,7 @@ export const dnd5eAdapter = {
     if (attacks.length === 1) return [{ id: 'attack', run: () => attacks[0].rollAttack() }];
     if (attacks.length) return [];
     const damage = candidates.filter(activity => activity.type !== 'heal' && activity.rollDamage && (activity.damage?.parts?.length || activity.damage?.includeBase));
-    return damage.length === 1 ? [{ id: 'damage', run: () => damage[0].rollDamage() }] : [];
+    return damage.length === 1 ? [{ id: 'damage', run: () => damage[0].rollDamage({}, { configure: false }) }] : [];
   },
   areaActions(spell, token, event) {
     const actions = [];
