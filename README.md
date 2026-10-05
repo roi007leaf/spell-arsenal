@@ -28,10 +28,10 @@ Spell Arsenal handles visuals. Your game system handles saves, damage, condition
 In Foundry's **Add-on Modules’ Install Module**, paste this manifest URL:
 
 ```text
-https://github.com/roi007leaf/spell-arsenal/releases/download/0.1.2/module.json
+https://github.com/roi007leaf/spell-arsenal/releases/download/1.0.0/module.json
 ```
 
-Enable **Spell Arsenal** and **Tile Arsenal** in your world. This is an early prerelease; [feedback and bug reports](https://github.com/roi007leaf/spell-arsenal/issues) are welcome.
+Enable **Spell Arsenal** and **Tile Arsenal** in your world.  [feedback and bug reports](https://github.com/roi007leaf/spell-arsenal/issues) are welcome.
 
 ## Quick start
 
@@ -83,3 +83,5 @@ Spell Arsenal still manages area placement updates, durations, and cleanup. Save
 ## Credits
 
 Inspired by **Lunatic Dice**. Artwork and sounds come from your installed **Tile Arsenal** module and are not bundled here.
+
+Automatic area damage rolls are enabled by default. Turn off **Automatically roll area damage** in module settings to roll damage manually from the spell card. Area placement still targets enemies.

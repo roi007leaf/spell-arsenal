@@ -18,6 +18,12 @@ test('placement targets all covered enemies and rolls damage once, keeping allie
     globalThis.game = { system: { id: system }, modules: new Map(), user: { id: 'gm', isGM: true }, users: { activeGM: { id: 'gm' } }, settings: { get: (_id, key) => key === 'enabled' ? true : [{ enabled: true, spell: 'Fireball', kind: 'area', areaAutomation: 'placement-entry' }] } };
     globalThis.canvas = { tokens: { setTargets: (ids, options) => { assert.equal(options.mode, 'replace'); events.push(ids); } } };
     globalThis.foundry = { applications: { api: { DialogV2: { wait: async () => { throw Error('damage must not be prompted again'); } } } } };
+    const get = game.settings.get;
+    game.settings.get = (id, key) => key === 'autoRollDamage' ? false : get(id, key);
+    await rollAreaPlacement(region);
+    assert.deepEqual(events, [['enemy1', 'enemy2']]);
+    events.length = 0;
+    game.settings.get = (id, key) => key === 'autoRollDamage' ? true : get(id, key);
     assert.deepEqual(areaEnemyTokens(region, spell).map(t => t.id), ['enemy1', 'enemy2']);
     await rollAreaPlacement(region);
     await rollAreaPlacement(region);

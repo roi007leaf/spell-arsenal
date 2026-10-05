@@ -65,6 +65,7 @@ async function clearEffects() {
 }
 
 Hooks.once('init', () => {
+  game.settings.register(MODULE_ID, 'autoRollDamage', { name: 'Automatically roll area damage', hint: 'Roll spell damage when a configured spell area is placed. Disable to roll damage manually from the spell card. Applies to all supported systems; attack rolls and explicit area roll prompts remain available.', scope: 'world', config: true, type: Boolean, default: true });
   game.settings.register(MODULE_ID, 'triggerAnimations', { name: 'Use Trigger Animations', hint: 'Manage Tile Arsenal spell entries and priorities in Trigger Animations. Enable its Spell Arsenal entries, then refresh after adding new spell mappings.', scope: 'world', config: true, type: Boolean, default: false, requiresReload: true });
   game.settings.register(MODULE_ID, 'enabled', { name: 'Enable spell visuals', hint: 'Automatically run mappings in the active GM session.', scope: 'world', config: true, type: Boolean, default: true, onChange: synchronize });
   game.settings.register(MODULE_ID, 'rules', { scope: 'world', config: false, type: Array, default: systemAdapter().defaults(), onChange: synchronize });

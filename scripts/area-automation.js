@@ -108,6 +108,10 @@ export function rollAreaPlacement(region) {
     if (!game.user.isGM || game.users.activeGM?.id !== game.user.id || placements.has(region.uuid)) return;
     const match = areaAutomation(region);
     if (!match || !areaTriggers(match.rule, match.spell).includes('placement')) return;
+    if (systemAdapter(match.spell).areaCastActions(match.spell, region)[0]?.id === 'damage' && game.settings.get('spell-arsenal', 'autoRollDamage') === false) {
+      canvas.tokens.setTargets(areaEnemyTokens(region, match.spell).map(token => token.id), { mode: 'replace' });
+      return;
+    }
     let tokens = areaEnemyTokens(region, match.spell);
     for (let attempt = 0; !tokens.length && attempt < 5; attempt++) {
       await new Promise(resolve => setTimeout(resolve, 50));
@@ -153,6 +157,7 @@ export function registerAreaAutomation() {
     const valid = () => match.spell.actor.isOwner && Boolean(areaAutomation(region)) && region.parent.regions.has(region.id);
     if (data.placement) {
       if (!valid()) return false;
+      if (systemAdapter(match.spell).areaCastActions(match.spell, region)[0]?.id === 'damage' && game.settings.get('spell-arsenal', 'autoRollDamage') === false) return false;
       canvas.tokens.setTargets(areaEnemyTokens(region, match.spell).map(token => token.id), { mode: 'replace' });
       const result = await systemAdapter(match.spell).areaCastActions(match.spell, region)[0]?.run();
       return Boolean(result && (!Array.isArray(result) || result.length));

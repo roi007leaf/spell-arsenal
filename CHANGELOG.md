@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.0 - 2026-10-05
+
+- First stable release for Foundry VTT.
+- Add a world setting to enable or disable automatic area damage rolls across PF2e, SF2e, and D&D 5e. Enabled by default.
+- When disabled, area placement still targets enemies; roll damage manually from the spell card. Attack rolls and explicit area prompts remain available.
+
 ## 0.1.7 - 2026-10-04
 
 - Fix automatic D&D 5e placement damage opening a roll configuration dialog over spell effects, including when Nik's DND5e Tweaks has automatic damage prompts disabled.
