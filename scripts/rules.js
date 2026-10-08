@@ -54,13 +54,13 @@ export function validateRules(rules) {
     if (!Number.isFinite(rule.duration) || rule.duration < 0 || rule.duration > 2147483 || (!isInstant(rule) && rule.kind !== 'area' && rule.duration === 0)) throw new Error('Duration must be positive; area effects may use 0 for permanent.');
     if (!Number.isInteger(rule.stage) || rule.stage < 1) throw new Error('Stage must be a positive integer.');
     if (!Number.isInteger(rule.squares) || rule.squares < 1 || rule.squares > 120) throw new Error('Choose 1-120 touching cells.');
-    return { areaMode: triggerMode, areaAutomation, areaTriggers: [...new Set(areaEvents)], areaRepeat, id: rule.id, enabled: rule.enabled, kind: rule.kind, spell, sourceUuid: typeof rule.sourceUuid === 'string' ? rule.sourceUuid : '', effect, hasTemplate: hasTemplate(rule), templateDetails, duration: isInstant(rule) ? 0 : rule.duration, durationUnit: displayDuration(rule).unit, instant: isInstant(rule), stage: rule.stage, stageMode, squares: rule.squares, highlight: rule.highlight };
+    return { areaMode: triggerMode, areaAutomation, areaTriggers: [...new Set(areaEvents)], areaRepeat, id: rule.id, enabled: rule.enabled, kind: rule.kind, spell, sourceUuid: typeof rule.sourceUuid === 'string' ? rule.sourceUuid : '', effect, hasTemplate: hasTemplate(rule), templateDetails, duration: isInstant(rule) ? 0 : rule.duration, durationUnit: displayDuration(rule).unit, instant: isInstant(rule), stage: rule.stage, stageMode, squares: rule.squares, highlight: rule.highlight, animater: rule.animater === true };
   });
 }
 
 export function runtimeSettings(rule) {
   return { SPELL_NAME: rule.spell, EFFECT_NAME: rule.effect, INSTANT: isInstant(rule), DURATION_SECONDS: isInstant(rule) ? 5 : rule.duration,
-    STAGE: rule.stage, STAGE_MODE: rule.stageMode ?? 'auto', FREEFORM_SQUARES: rule.squares, REGION_HIGHLIGHT_ONLY_WHILE_EDITING: rule.highlight, TILE_ELEVATION_OFFSET: 0.1 };
+    STAGE: rule.stage, STAGE_MODE: rule.stageMode ?? 'auto', FREEFORM_SQUARES: rule.squares, REGION_HIGHLIGHT_ONLY_WHILE_EDITING: rule.highlight, TILE_ELEVATION_OFFSET: 0.1, ANIMATER: rule.animater === true };
 }
 
 export function runtimeSignature(rule) { return JSON.stringify([rule.kind, runtimeSettings(rule)]); }

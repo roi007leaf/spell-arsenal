@@ -2,10 +2,10 @@
   "id": "spell-arsenal",
   "title": "Spell Arsenal",
   "description": "Configurable PF2e, SF2e and D&D 5e spell visuals powered by Tile Arsenal.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "url": "https://github.com/roi007leaf/spell-arsenal",
-  "manifest": "https://github.com/roi007leaf/spell-arsenal/releases/download/1.0.0/module.json",
-  "download": "https://github.com/roi007leaf/spell-arsenal/releases/download/1.0.0/module.zip",
+  "manifest": "https://github.com/roi007leaf/spell-arsenal/releases/latest/download/module.json",
+  "download": "https://github.com/roi007leaf/spell-arsenal/releases/download/1.0.1/module.zip",
   "compatibility": { "minimum": "14", "verified": "14", "maximum": "14" },
   "authors": [{ "name": "Spell Arsenal contributors" }],
   "relationships": {

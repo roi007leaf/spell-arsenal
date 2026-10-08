@@ -3,6 +3,9 @@ import { spellAreaInfo } from './spell-parser.js';
 import { systemAdapter } from './systems.js';
 import { regionCoverage } from './region-coverage.js';
 import { dispatchTileVisual } from './trigger-integration.js';
+import { playAnimater, recordAnimation } from './animater-integration.js';
+import { waitForToolbeltTargets } from './toolbelt-targeting.js';
+import { areaEnemyTokens } from './area-automation.js';
 
 const documentTypes = ['Tile', 'AmbientLight', 'AmbientSound', 'Region'];
 const ownershipFlags = { area: 'spellArsenalArea', damage: 'spellArsenalDamage', caster: 'spellArsenalCaster' };
@@ -36,6 +39,9 @@ class SpellVisualRunner {
     this.hooks = [];
     this.timers = new Map();
     this.received = new Set();
+    this.animated = new Map();
+    this.animationTasks = new WeakMap();
+    this.confirmedAnimationRegions = new WeakSet();
     this.finished = new Set();
     this.deadlines = new Map();
     this.queue = Promise.resolve();
@@ -97,10 +103,10 @@ class SpellVisualRunner {
         this.submit(async () => { for (const scene of game.scenes) await this.erase(scene, message.id); });
     });
     if (this.kind === 'area') {
-      this.listen('createRegion', region => { if (this.matches(region)) this.submit(() => this.renderRegion(region)); });
+      this.listen('createRegion', region => { if (this.matches(region)) this.queueRegion(region); });
       this.listen('updateRegion', (region, changes) => {
         if (this.matches(region) && (['shapes', 'elevation', 'levels', 'hidden', 'restriction', '_shapeConstraints'].some(key => key in changes) || this.adapter.regionFlagsChanged(changes)))
-          this.submit(() => this.renderRegion(region));
+          this.queueRegion(region);
       });
       this.listen('deleteRegion', region => {
         if (region.flags?.world?.[this.flag]) return;
@@ -229,25 +235,84 @@ class SpellVisualRunner {
     if (canvas.grid.isGridless) throw new Error('Spell visuals require a grid.');
     const offset = canvas.grid.getOffset(position.center);
     const center = canvas.grid.getCenterPoint(offset);
+    if (this.settings.ANIMATER) await this.animate(message.id, { type: this.kind === 'damage' ? 'damage' : 'use', item: message.item, actor: message.actor,
+      tokenId: this.kind === 'caster' ? token.id : message.speaker?.token, sceneId: token.parent.id }, { targets: this.kind === 'damage' && token.object ? [token.object] : [] });
+    if (!this.enabled || !authorized() || this.adapter.reverted(message) || !canvas.ready || canvas.scene !== token.parent || canvas.level?.id !== position.levelId) return;
     await this.createVisuals(token.parent, message.id, [offset], (data, type) => {
       data.x = Math.round(data.x + position.center.x - center.x);
       data.y = Math.round(data.y + position.center.y - center.y);
       data.elevation = this.kind === 'caster' ? data.elevation + position.elevation - canvas.level.elevation.base
         : position.elevation + (type === 'Tile' ? this.settings.TILE_ELEVATION_OFFSET ?? 0.1 : 0);
     }, this.settings.DURATION_SECONDS, spellStageRank(message.item, this.adapter.messageOrigin(message)));
-    if (!this.enabled || this.adapter.reverted(message)) await this.erase(token.parent, message.id);
+    if (!this.enabled || this.adapter.reverted(message)) return this.erase(token.parent, message.id);
+  }
+
+  animate(source, event, context) {
+    if (this.animated.has(source)) return this.animated.get(source);
+    const task = playAnimater(event, context).catch(error => this.report(error));
+    this.animated.set(source, task);
+    if (this.animated.size > 500) this.animated.delete(this.animated.keys().next().value);
+    return task;
+  }
+
+  queueRegion(region) {
+    recordAnimation(this.settings.SPELL_NAME, 'Placed', `Animater ${this.settings.ANIMATER ? 'enabled' : 'disabled'}`, region.uuid);
+    if (!this.settings.ANIMATER) return this.submit(() => this.renderRegion(region));
+    // Dispatch while the source still exists. Tile writes stay serialized, but
+    // Toolbelt's template removal must not cancel an opted-in Animater recipe.
+    dispatchTileVisual({ id: this.owner.replace(/^spell-arsenal:/, ''), spell: this.settings.SPELL_NAME, kind: this.kind }, async () => {
+      await this.animateRegion(region);
+      return this.submit(() => this.renderRegion(region, true));
+    }).catch(error => this.report(error));
+  }
+
+  animateRegion(region) {
+    if (!this.settings.ANIMATER) return;
+    if (this.animationTasks.has(region)) return this.animationTasks.get(region);
+    const skipped = !this.enabled ? 'Mapping stopped' : !authorized() ? 'Requires active GM' :
+      !region.parent.regions.has(region.id) ? 'Source area already removed' :
+      this.adapter.placementPending(region) ? 'Template placement still pending' :
+      this.finished.has(region.uuid) ? 'Area visual already expired' : !this.visible(region) ? 'Area outside active canvas level' : null;
+    if (skipped) { recordAnimation(this.settings.SPELL_NAME, 'Skipped', skipped, region.uuid); return; }
+    const spell = this.adapter.regionCastSpell(region);
+    const message = region.message ?? game.messages?.get(region.flags?.[game.system.id]?.messageId);
+    const origin = this.adapter.regionOrigin(region);
+    const event = { type: 'template', item: spell, actor: spell?.actor ?? message?.actor, template: region, sceneId: region.parent.id,
+      castRank: Number(origin?.castRank ?? spell?.rank) || undefined,
+      tokenId: message?.speaker?.scene === region.parent.id ? message.speaker.token : undefined };
+    const task = (async () => {
+      recordAnimation(this.settings.SPELL_NAME, 'Targeting', 'Waiting for Toolbelt targets', region.uuid);
+      const targeting = await waitForToolbeltTargets(region);
+      const canceled = !this.enabled ? 'Mapping stopped during targeting' : !authorized() ? 'Active GM changed during targeting' :
+        !this.visible(region) ? 'Canvas level changed during targeting' :
+        targeting.handled && !targeting.targets?.length ? 'Toolbelt canceled or selected no targets' :
+        !targeting.handled && !region.parent.regions.has(region.id) ? 'Area removed without target confirmation' : null;
+      if (canceled) { recordAnimation(this.settings.SPELL_NAME, 'Skipped', canceled, region.uuid); return; }
+      const tokens = targeting.handled ? [...region.parent.tokens].filter(token => targeting.targets.includes(token.uuid)) : areaEnemyTokens(region, spell);
+      // Template recipes can contain projectiles and target motion as well as
+      // area effects. Supply the completed selection instead of an empty array.
+      if (targeting.handled) this.confirmedAnimationRegions.add(region);
+      await this.animate(region.uuid, event, { targets: tokens.map(token => token.object).filter(Boolean) });
+    })();
+    this.animationTasks.set(region, task);
+    task.catch(error => this.report(error));
+    return task;
   }
 
   async renderRegion(region, dispatched = false) {
     if (!dispatched) return dispatchTileVisual({ id: this.owner.replace(/^spell-arsenal:/, ''), spell: this.settings.SPELL_NAME, kind: this.kind }, () => this.renderRegion(region, true));
-    if (!region.parent.regions.has(region.id) || this.adapter.placementPending(region) || this.finished.has(region.uuid)) return;
+    await this.animateRegion(region);
+    // Toolbelt may remove a confirmed instant template during Animater playback.
+    // Keep its snapshot for the following Tile Arsenal visual and normal expiry.
+    const sourceAvailable = () => region.parent.regions.has(region.id) || this.confirmedAnimationRegions.has(region);
+    if (!this.enabled || !authorized() || !sourceAvailable() || this.adapter.placementPending(region) || this.finished.has(region.uuid)) return;
     if (!this.visible(region)) { await this.erase(region.parent, region.id); return; }
     if (canvas.grid.isGridless) throw new Error('Spell visuals require a grid.');
     // Region creation can precede canvas coverage preparation.
     let coverage = regionCoverage(region, canvas.level, canvas.grid);
     for (let attempt = 0; !coverage && attempt < 5; attempt++) {
       await new Promise(resolve => setTimeout(resolve, 50));
-      if (!this.enabled || !authorized() || !region.parent.regions.has(region.id) || !this.visible(region) || this.adapter.placementPending(region)) return;
+      if (!this.enabled || !authorized() || !sourceAvailable() || !this.visible(region) || this.adapter.placementPending(region)) return;
       coverage = regionCoverage(region, canvas.level, canvas.grid);
     }
     // Inapplicable or still preparing coverage can be retried by region updates/canvasReady.
@@ -261,8 +326,8 @@ class SpellVisualRunner {
       data.elevation = type === 'Region' ? { bottom: ground, top: ground, topInclusive: true } : ground;
     }, this.lifetime(region), spellStageRank(spell, this.adapter.regionOrigin(region)));
     if (!created) { this.finished.add(region.uuid); await this.restoreOverlay(region); return; }
-    if (!region.parent.regions.has(region.id) || !this.enabled || !authorized()) { await this.erase(region.parent, region.id); return; }
-    if (this.settings.REGION_HIGHLIGHT_ONLY_WHILE_EDITING && region.visibility !== CONST.REGION_VISIBILITY.LAYER) {
+    if (!sourceAvailable() || !this.enabled || !authorized()) { await this.erase(region.parent, region.id); return; }
+    if (region.parent.regions.has(region.id) && this.settings.REGION_HIGHLIGHT_ONLY_WHILE_EDITING && region.visibility !== CONST.REGION_VISIBILITY.LAYER) {
       const saved = region.flags?.world?.spellArsenalHighlight;
       if (!saved || saved.owner === this.owner) await region.update({ visibility: CONST.REGION_VISIBILITY.LAYER,
         'flags.world.spellArsenalHighlight': saved ?? { owner: this.owner, visibility: region.visibility } });

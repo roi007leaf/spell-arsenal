@@ -5,6 +5,7 @@ import { SpellArsenalConfig } from './ui.js';
 import { rememberAnimationRegion, preventMappedAnimation, suppressMappedAnimations } from './animation-integration.js';
 import { systemAdapter } from './systems.js';
 import { registerTriggerIntegration, triggerIntegrationEnabled } from './trigger-integration.js';
+import { animationActivity } from './animater-integration.js';
 
 registerTriggerIntegration();
 registerAreaAutomation();
@@ -73,10 +74,11 @@ Hooks.once('init', () => {
 });
 
 Hooks.once('ready', async () => {
-  game.modules.get(MODULE_ID).api = { open: () => new SpellArsenalConfig().render(true), synchronize, clearEffects, status: () => [...states.keys()], diagnose: () => {
+  game.modules.get(MODULE_ID).api = { open: () => new SpellArsenalConfig().render(true), synchronize, clearEffects, status: () => [...states.keys()], animationActivity, diagnose: () => {
     const result = {
       enabled: game.settings.get(MODULE_ID, 'enabled'), activeGM: activeGM(), activeRules: [...states.keys()],
       rules: game.settings.get(MODULE_ID, 'rules'),
+      animationActivity: animationActivity(),
       regions: [...(canvas.scene?.regions ?? [])].map(region => {
         let spell, pending, error;
         try { spell = systemAdapter().regionName(region); pending = systemAdapter().placementPending(region); } catch (e) { error = e.message; }

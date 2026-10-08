@@ -2,22 +2,24 @@ import { systemAdapter } from './systems.js';
 import { tokenInsideArea, crossesArea } from './area-movement.js';
 import { isInstant } from './rules.js';
 import { AREA_TRIGGERS, areaTriggers, areaRepeatKey } from './area-triggers.js';
+import { registerToolbeltTargeting, waitForToolbeltTargets, targetingRegion } from './toolbelt-targeting.js';
 const seen = new Set();
 let promptQueue = Promise.resolve();
 const dialogs = new Set();
 let castQueue = Promise.resolve();
 const placements = new Set();
+const completedPlacements = new WeakSet();
 let eventSequence = 0;
 function playerOwner(actor) {
   const users = game.users.contents ?? (game.users[Symbol.iterator] ? [...game.users] : []);
   const owners = users.filter(user => user.active && !user.isGM && actor?.testUserPermission?.(user, 'OWNER'));
   return owners.find(user => user.character?.id === actor.id) ?? owners[0];
 }
-export async function requestCasterRoll(spell, region, token, event, valid, placement = false) {
+export async function requestCasterRoll(spell, region, token, event, valid, placement = false, targetUuids) {
   if (!valid()) return false;
   const owner = playerOwner(spell.actor);
   if (owner?.query) {
-    try { return await owner.query('spell-arsenal.area-cast', { regionUuid: region.uuid, tokenUuid: token?.uuid, event, placement }, { timeout: 120000 }); }
+    try { return await owner.query('spell-arsenal.area-cast', { regionUuid: region.uuid, tokenUuid: token?.uuid, event, placement, targetUuids }, { timeout: 120000 }); }
     catch (error) { console.warn('Spell Arsenal caster request', error); if (valid()) ui.notifications.warn(`Roll request to ${owner.name} ended without a response. Use the spell card if needed.`); return false; }
   }
   if (placement) return systemAdapter(spell).areaCastActions(spell, region)[0]?.run();
@@ -103,32 +105,44 @@ export function areaEnemyTokens(region, spell) {
   const caster = spell.actor?.token ?? tokens.find(token => token.actor?.id === spell.actor?.id);
   return tokens.filter(token => token.actor && token.actor.id !== spell.actor?.id && systemAdapter(spell).areaEnemy(spell, caster, token) && inside(region, token));
 }
-export function rollAreaPlacement(region) {
+export async function rollAreaPlacement(region) {
+  if (!game.user.isGM || game.users.activeGM?.id !== game.user.id || placements.has(region.uuid) || completedPlacements.has(region)) return;
+  const initial = areaAutomation(region);
+  if (!initial || !areaTriggers(initial.rule, initial.spell).includes('placement')) return;
+  const targeting = await waitForToolbeltTargets(region);
+  if (targeting.handled && !targeting.targets?.length) return;
   const task = castQueue.then(async () => {
-    if (!game.user.isGM || game.users.activeGM?.id !== game.user.id || placements.has(region.uuid)) return;
+    if (!game.user.isGM || game.users.activeGM?.id !== game.user.id || placements.has(region.uuid) || completedPlacements.has(region)) return;
     const match = areaAutomation(region);
     if (!match || !areaTriggers(match.rule, match.spell).includes('placement')) return;
     if (systemAdapter(match.spell).areaCastActions(match.spell, region)[0]?.id === 'damage' && game.settings.get('spell-arsenal', 'autoRollDamage') === false) {
-      canvas.tokens.setTargets(areaEnemyTokens(region, match.spell).map(token => token.id), { mode: 'replace' });
+      if (!targeting.handled) canvas.tokens.setTargets(areaEnemyTokens(region, match.spell).map(token => token.id), { mode: 'replace' });
       return;
     }
-    let tokens = areaEnemyTokens(region, match.spell);
-    for (let attempt = 0; !tokens.length && attempt < 5; attempt++) {
+    let tokens = targeting.handled ? [...region.parent.tokens].filter(token => targeting.targets.includes(token.uuid)) : areaEnemyTokens(region, match.spell);
+    for (let attempt = 0; !targeting.handled && !tokens.length && attempt < 5; attempt++) {
       await new Promise(resolve => setTimeout(resolve, 50));
       tokens = areaEnemyTokens(region, match.spell);
     }
     placements.add(region.uuid);
-    const valid = () => game.user.isGM && game.users.activeGM?.id === game.user.id && Boolean(areaAutomation(region)) && (!region.parent.regions.has || region.parent.regions.has(region.id)) && (!globalThis.canvas?.scene || canvas.scene.id === region.parent.id);
+    completedPlacements.add(region);
+    const valid = () => game.user.isGM && game.users.activeGM?.id === game.user.id && Boolean(areaAutomation(region)) &&
+      (targeting.handled || !region.parent.regions.has || region.parent.regions.has(region.id)) && (!globalThis.canvas?.scene || canvas.scene.id === region.parent.id);
     if (!valid()) return;
     try {
-      canvas.tokens.setTargets(tokens.map(token => token.id), { mode: 'replace' });
+      if (targeting.handled && !tokens.length) return;
+      // On a different GM client, these are Toolbelt's choices from the caster's card.
+      const currentTargets = [...game.user.targets ?? []].map(token => (token.document ?? token).uuid);
+      if (!targeting.handled || currentTargets.length !== tokens.length || tokens.some(token => !currentTargets.includes(token.uuid)))
+        canvas.tokens.setTargets(tokens.map(token => token.id), { mode: 'replace' });
       if (!valid()) return;
       const actions = systemAdapter(match.spell).areaCastActions(match.spell, region);
       if (actions.length) {
-        const result = await requestCasterRoll(match.spell, region, tokens[0], 'placement', valid, true);
+        const result = await requestCasterRoll(match.spell, region, tokens[0], 'placement', valid, true, targeting.handled ? tokens.map(token => token.uuid) : undefined);
         if (!result || (Array.isArray(result) && !result.length)) return;
-        for (const token of tokens) if (valid()) await promptArea(region, token, 'placement', false, true);
-        if (actions[0].id === 'damage' && isInstant(match.rule) && valid()) await region.delete();
+        const exists = () => !region.parent.regions.has || region.parent.regions.has(region.id);
+        for (const token of tokens) if (valid() && exists()) await promptArea(region, token, 'placement', false, true);
+        if (actions[0].id === 'damage' && isInstant(match.rule) && valid() && exists()) await region.delete();
       } else for (const token of tokens) await promptArea(region, token, 'placement');
     } catch (error) { console.error('Spell Arsenal area roll', error); ui.notifications.error(error.message); }
   });
@@ -149,16 +163,20 @@ export async function cleanupInstantDamage(message) {
   await matches[0].delete();
 }
 export function registerAreaAutomation() {
+  registerToolbeltTargeting();
   CONFIG.queries['spell-arsenal.area-cast'] = async data => {
     if (!Object.hasOwn(AREA_TRIGGERS, data.event)) return false;
-    const region = await fromUuid(data.regionUuid);
+    const region = await fromUuid(data.regionUuid) ?? (data.placement && Array.isArray(data.targetUuids) ? targetingRegion(data.regionUuid) : null);
     const match = region && areaAutomation(region);
     if (!match?.spell.actor?.isOwner || (globalThis.canvas?.scene && canvas.scene.id !== region.parent.id)) return false;
-    const valid = () => match.spell.actor.isOwner && Boolean(areaAutomation(region)) && region.parent.regions.has(region.id);
+    const valid = () => match.spell.actor.isOwner && Boolean(areaAutomation(region)) &&
+      (region.parent.regions.has(region.id) || (data.placement && Array.isArray(data.targetUuids) && targetingRegion(region.uuid) === region));
     if (data.placement) {
       if (!valid()) return false;
       if (systemAdapter(match.spell).areaCastActions(match.spell, region)[0]?.id === 'damage' && game.settings.get('spell-arsenal', 'autoRollDamage') === false) return false;
-      canvas.tokens.setTargets(areaEnemyTokens(region, match.spell).map(token => token.id), { mode: 'replace' });
+      const tokens = Array.isArray(data.targetUuids) ? [...region.parent.tokens].filter(token => data.targetUuids.includes(token.uuid)) : areaEnemyTokens(region, match.spell);
+      if (!tokens.length) return false;
+      canvas.tokens.setTargets(tokens.map(token => token.id), { mode: 'replace' });
       const result = await systemAdapter(match.spell).areaCastActions(match.spell, region)[0]?.run();
       return Boolean(result && (!Array.isArray(result) || result.length));
     }

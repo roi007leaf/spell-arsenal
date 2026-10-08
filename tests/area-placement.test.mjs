@@ -78,8 +78,7 @@ test('PF2e placement uses actor alliance with neutral tokens and waits for regio
   await rollAreaPlacement(region);
   assert.deepEqual(events, [['enemy'], 'damage']);
   coverageReady = false;
-  region.uuid = 'Region.no-enemies';
-  await rollAreaPlacement(region);
+  await rollAreaPlacement({ ...region, uuid: 'Region.no-enemies' });
   assert.deepEqual(events.slice(2), [[], 'damage']);
 });
 

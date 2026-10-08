@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.1 - 2026-10-08
+
+- Add optional Animater recipe playback per mapping, with bulk Enable all / Disable all controls.
+- Play Animater first, then Spell Arsenal visuals, once per area or chat card.
+- Wait for PF2e Toolbelt target confirmation before automatic damage and animation; preserve selected targets when Toolbelt removes the template.
+- Keep canceled targeting and empty selections from triggering automatic damage.
+- Add playback diagnostics for skipped or blocked Animater recipes.
+
 ## 1.0.0 - 2026-10-05
 
 - First stable release for Foundry VTT.

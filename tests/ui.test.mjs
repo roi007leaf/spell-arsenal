@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 globalThis.foundry = { applications: { api: { ApplicationV2: class {} } } };
+globalThis.game = { modules: new Map() };
 const { SpellArsenalConfig } = await import('../scripts/ui.js');
 const { DEFAULT_RULES, validateRules } = await import('../scripts/rules.js');
 

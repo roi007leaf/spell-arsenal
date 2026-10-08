@@ -20,6 +20,7 @@
 .spell-arsenal .drag-over .spell-drop-zone { border-color: #a7caff; background: #293d59; }
 .spell-arsenal [data-drop-status]:empty { display: none; }
 .spell-arsenal .mapping-search { display: flex; align-items: center; gap: 9px; margin: 14px 0; color: #9baac1; }
+.spell-arsenal .animater-bulk-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; font-size: 12px; }
 .spell-arsenal .mapping-list { display: flex; flex-direction: column; gap: 12px; }
 .spell-arsenal .mapping-card { background: #1b2637; border: 1px solid #33435c; border-radius: 10px; padding: 13px 15px; }
 .spell-arsenal .mapping-card.is-disabled { border-style: dashed; }

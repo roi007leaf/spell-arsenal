@@ -50,6 +50,12 @@ Use **Add missing defaults** to add catalog mappings while keeping your customiz
 
 **Stages:** Spell rank uses the available stage closest to the cast rank or level. Cantrips use stage 1. Cast buildup increases the stage when the same effect is cast again in an occupied cell. Fixed lets you choose manually.
 
+**Animater:** Enable the desired spell recipe or catalog entry in Animater, then check **Also play Animater recipe** on its mapping. Animater finishes before Spell Arsenal starts its Tile Arsenal visuals. Area animations wait for Toolbelt's target confirmation when its helper is enabled, use the selected tokens, and can finish both visuals after the template is removed.
+
+Use **Animater for all entries → Enable all / Disable all** above the mapping list to change every mapping, including filtered entries. Click **Save mappings** to apply.
+
+For playback troubleshooting, run `game.modules.get('spell-arsenal').api.animationActivity()` in Foundry's console after casting. The last 40 entries show placement, target waits, recipe resolution, playback completion, and reasons for skipped or blocked animations. Reload Foundry after updating module scripts.
+
 **Cleanup:** Delete the source region to remove its visuals, or use **Pause & clear effects** to stop automation and clear generated effects across scenes.
 
 ## Area save and damage prompts
@@ -84,4 +90,4 @@ Spell Arsenal still manages area placement updates, durations, and cleanup. Save
 
 Inspired by **Lunatic Dice**. Artwork and sounds come from your installed **Tile Arsenal** module and are not bundled here.
 
-Automatic area damage rolls are enabled by default. Turn off **Automatically roll area damage** in module settings to roll damage manually from the spell card. Area placement still targets enemies.
+Automatic area damage rolls are enabled by default. Turn off **Automatically roll area damage** in module settings to roll damage manually from the spell card. With PF2e Toolbelt's template helper enabled, damage waits for its targeting confirmation and uses the chosen targets; canceling or selecting no targets skips the automatic roll. Otherwise, area placement targets enemies.
